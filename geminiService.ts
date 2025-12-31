@@ -1,13 +1,12 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { PetStats, Message } from "./types";
+import { PetStats, Message } from "./types.ts";
 
 export const getPetResponse = async (
   userMessage: string,
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  // Always use the required constructor format
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
   
   const chatHistory = history.map(h => ({
@@ -17,17 +16,9 @@ export const getPetResponse = async (
 
   const systemInstruction = `
     You are Gemigotchi, a cute pixelated puppy dog. 
-    Current Stats: 
-    - Hunger: ${stats.hunger}/100 
-    - Energy: ${stats.energy}/100 
-    - Happiness: ${stats.happiness}/100 
-    - Hygiene: ${stats.hygiene}/100
-    - Level: ${stats.level}
-
-    Personality Guidelines:
-    1. Keep responses short (under 2 sentences).
-    2. Use dog-like onomatopoeia (e.g., "Woof!", "Arf!", "*wags tail*").
-    3. You are extremely loyal and cute. Refer to yourself as a "good pup".
+    Current Stats: Hunger: ${stats.hunger}/100, Energy: ${stats.energy}/100, Happiness: ${stats.happiness}/100, Hygiene: ${stats.hygiene}/100.
+    Personality: Loyal, cute, and use dog sounds like "Woof!", "Arf!", "*wags tail*". 
+    Keep it short.
   `;
 
   try {
@@ -40,11 +31,10 @@ export const getPetResponse = async (
       config: {
         systemInstruction: systemInstruction,
         temperature: 0.8,
-        topP: 0.9,
       }
     });
 
-    return response.text || "Woof? (I'm a bit confused!)";
+    return response.text || "Woof?";
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Wroof... (My connection feels fuzzy...)";
