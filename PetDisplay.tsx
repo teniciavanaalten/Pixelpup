@@ -10,7 +10,7 @@ interface PetDisplayProps {
 
 const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping }) => {
   const currentState = isSleeping ? PetState.SLEEPING : state;
-  const icon = (PetIcons as any)[currentState];
+  const icon = PetIcons[currentState];
 
   return (
     <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[250px] overflow-hidden shadow-inner">

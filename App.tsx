@@ -104,6 +104,7 @@ const App: React.FC = () => {
 
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col p-4 md:p-6 lg:py-10">
+      {/* Device Header */}
       <div className="bg-rose-100 rounded-t-3xl p-6 shadow-2xl border-b-8 border-rose-200">
         <div className="flex justify-between items-end mb-6">
           <div className="flex flex-col">
@@ -128,12 +129,15 @@ const App: React.FC = () => {
         </div>
       </div>
 
+      {/* Chat Area */}
       <div className="flex-1 bg-white border-x-8 border-rose-200 overflow-hidden flex flex-col min-h-[300px] shadow-xl">
         <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-rose-50/20">
           {messages.map((m, i) => (
             <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm font-bold shadow-sm border-2 ${
-                m.role === 'user' ? 'bg-rose-100 text-black border-rose-200 rounded-tr-none' : 'bg-white text-black border-rose-50 rounded-tl-none'
+                m.role === 'user' 
+                  ? 'bg-rose-100 text-black border-rose-200 rounded-tr-none' 
+                  : 'bg-white text-black border-rose-50 rounded-tl-none'
               }`}>
                 {m.text}
               </div>
@@ -162,6 +166,7 @@ const App: React.FC = () => {
         </form>
       </div>
 
+      {/* Action Buttons */}
       <div className="bg-rose-100 rounded-b-3xl p-4 shadow-2xl border-t-8 border-rose-200 flex justify-between gap-3">
         <ActionButton icon="fa-solid fa-ice-cream" label="Snack" onClick={() => handleAction('feed')} color="bg-white text-rose-400 border-b-4 border-rose-200" />
         <ActionButton icon="fa-solid fa-star" label="Play" onClick={() => handleAction('play')} color="bg-white text-orange-300 border-b-4 border-orange-200" />

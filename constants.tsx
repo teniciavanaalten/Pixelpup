@@ -26,7 +26,7 @@ export const INITIAL_STATS = {
 export const XP_PER_ACTION = 10;
 export const XP_FOR_NEXT_LEVEL = 100;
 
-export const PetIcons = {
+export const PetIcons: Record<string, React.ReactNode> = {
   happy: <DogSVG eyes="^ ^" mouth="◡" extra={<rect x="11" y="19" width="2" height="2" fill="#FFB6C1" opacity="0.8" />} />,
   sad: <DogSVG eyes="T T" mouth="◠" />,
   sleeping: <DogSVG eyes="- -" mouth="◡" />,
