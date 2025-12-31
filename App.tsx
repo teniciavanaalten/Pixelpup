@@ -1,10 +1,10 @@
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PetStats, Message, PetState } from './types';
 import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL } from './constants';
-import StatBar from './components/StatBar';
-import PetDisplay from './components/PetDisplay';
-import { getPetResponse } from './services/geminiService';
+import StatBar from './StatBar';
+import PetDisplay from './PetDisplay';
+import { getPetResponse } from './geminiService';
 
 const App: React.FC = () => {
   const [stats, setStats] = useState<PetStats>(INITIAL_STATS);
@@ -39,7 +39,6 @@ const App: React.FC = () => {
         };
       });
     }, 10000);
-
     return () => clearInterval(timer);
   }, [isSleeping]);
 
@@ -48,7 +47,6 @@ const App: React.FC = () => {
     else if (stats.energy < 20) setPetState(PetState.SLEEPING);
     else if (stats.hygiene < 20) setPetState(PetState.DIRTY);
     else if (stats.happiness < 30) setPetState(PetState.SAD);
-    else if (stats.happiness > 80) setPetState(PetState.HAPPY);
     else setPetState(PetState.HAPPY);
   }, [stats]);
 
@@ -65,7 +63,7 @@ const App: React.FC = () => {
       if (newXP >= XP_FOR_NEXT_LEVEL) {
         newXP -= XP_FOR_NEXT_LEVEL;
         newLevel += 1;
-        setMessages(m => [...m, { role: 'pet', text: `YAY! I'm level ${newLevel} now! You're the best! ✨🐶` }]);
+        setMessages(m => [...m, { role: 'pet', text: `YAY! I'm level ${newLevel} now! ✨🐶` }]);
       }
       return { ...prev, xp: newXP, level: newLevel };
     });
@@ -73,26 +71,19 @@ const App: React.FC = () => {
 
   const handleAction = (type: 'feed' | 'play' | 'clean' | 'sleep') => {
     if (isSleeping && type !== 'sleep') {
-      setMessages(m => [...m, { role: 'pet', text: "*dreaming of treats*... 💤" }]);
+      setMessages(m => [...m, { role: 'pet', text: "*dreaming of bones*... 💤" }]);
       return;
     }
 
     setStats(prev => {
       switch (type) {
-        case 'feed':
-          return { ...prev, hunger: Math.min(100, prev.hunger + 30), hygiene: Math.max(0, prev.hygiene - 5) };
-        case 'play':
-          return { ...prev, happiness: Math.min(100, prev.happiness + 25), energy: Math.max(0, prev.energy - 15) };
-        case 'clean':
-          return { ...prev, hygiene: Math.min(100, prev.hygiene + 50) };
-        case 'sleep':
-          setIsSleeping(!isSleeping);
-          return prev;
-        default:
-          return prev;
+        case 'feed': return { ...prev, hunger: Math.min(100, prev.hunger + 30), hygiene: Math.max(0, prev.hygiene - 5) };
+        case 'play': return { ...prev, happiness: Math.min(100, prev.happiness + 25), energy: Math.max(0, prev.energy - 15) };
+        case 'clean': return { ...prev, hygiene: Math.min(100, prev.hygiene + 50) };
+        case 'sleep': setIsSleeping(!isSleeping); return prev;
+        default: return prev;
       }
     });
-    
     if (type !== 'sleep') addXP(XP_PER_ACTION);
   };
 
@@ -106,27 +97,23 @@ const App: React.FC = () => {
     setIsThinking(true);
 
     const response = await getPetResponse(userText, stats, messages);
-    
     setMessages(prev => [...prev, { role: 'pet', text: response }]);
     setIsThinking(false);
     addXP(5);
   };
 
   return (
-    <div className="max-w-md mx-auto min-h-screen flex flex-col p-4 md:p-6 lg:py-10 font-sans">
+    <div className="max-w-md mx-auto min-h-screen flex flex-col p-4 md:p-6 lg:py-10">
       <div className="bg-rose-100 rounded-t-3xl p-6 shadow-2xl border-b-8 border-rose-200">
         <div className="flex justify-between items-end mb-6">
           <div className="flex flex-col">
             <h1 className="text-3xl font-black text-rose-400 tracking-tighter italic">PIXELPUP</h1>
-            <span className="text-[10px] font-bold text-rose-500 bg-white px-2 py-0.5 rounded-full w-fit uppercase border border-rose-100 shadow-sm">LVL {stats.level}</span>
+            <span className="text-[10px] font-bold text-rose-500 bg-white px-2 py-0.5 rounded-full w-fit border border-rose-100">LVL {stats.level}</span>
           </div>
           <div className="text-right flex flex-col items-end">
              <div className="text-[9px] font-black text-rose-300 uppercase tracking-widest mb-1">XP Gauge</div>
              <div className="w-24 h-3 bg-white rounded-full border-2 border-rose-200 overflow-hidden">
-                <div 
-                  className="h-full bg-rose-300 transition-all duration-300"
-                  style={{ width: `${(stats.xp / XP_FOR_NEXT_LEVEL) * 100}%` }}
-                ></div>
+                <div className="h-full bg-rose-300 transition-all duration-300" style={{ width: `${(stats.xp / XP_FOR_NEXT_LEVEL) * 100}%` }}></div>
              </div>
           </div>
         </div>
@@ -142,19 +129,11 @@ const App: React.FC = () => {
       </div>
 
       <div className="flex-1 bg-white border-x-8 border-rose-200 overflow-hidden flex flex-col min-h-[300px] shadow-xl">
-        <div 
-          ref={scrollRef}
-          className="flex-1 overflow-y-auto p-4 space-y-3 bg-rose-50/20"
-        >
+        <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3 bg-rose-50/20">
           {messages.map((m, i) => (
-            <div 
-              key={i} 
-              className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
-            >
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[85%] px-4 py-2 rounded-2xl text-sm font-bold shadow-sm border-2 ${
-                m.role === 'user' 
-                ? 'bg-rose-100 text-black border-rose-200 rounded-tr-none' 
-                : 'bg-white text-black border-rose-50 rounded-tl-none'
+                m.role === 'user' ? 'bg-rose-100 text-black border-rose-200 rounded-tr-none' : 'bg-white text-black border-rose-50 rounded-tl-none'
               }`}>
                 {m.text}
               </div>
@@ -169,10 +148,7 @@ const App: React.FC = () => {
           )}
         </div>
         
-        <form 
-          onSubmit={handleSendMessage}
-          className="p-3 bg-white border-t-2 border-rose-50 flex gap-2"
-        >
+        <form onSubmit={handleSendMessage} className="p-3 bg-white border-t-2 border-rose-50 flex gap-2">
           <input
             type="text"
             value={userInput}
@@ -180,68 +156,28 @@ const App: React.FC = () => {
             placeholder="Tell your puppy something cute..."
             className="flex-1 bg-rose-50/30 border-2 border-rose-100 rounded-2xl px-4 py-2 text-sm font-bold text-black focus:outline-none focus:border-rose-300 transition-all placeholder:text-rose-200"
           />
-          <button 
-            type="submit"
-            disabled={!userInput.trim() || isThinking}
-            className="bg-rose-300 text-white px-4 rounded-2xl flex items-center justify-center disabled:opacity-50 hover:bg-rose-400 transition-colors shadow-lg border-b-4 border-rose-400"
-          >
+          <button type="submit" disabled={!userInput.trim() || isThinking} className="bg-rose-300 text-white px-4 rounded-2xl flex items-center justify-center disabled:opacity-50 hover:bg-rose-400 transition-colors shadow-lg border-b-4 border-rose-400">
             <i className="fa-solid fa-wand-sparkles"></i>
           </button>
         </form>
       </div>
 
       <div className="bg-rose-100 rounded-b-3xl p-4 shadow-2xl border-t-8 border-rose-200 flex justify-between gap-3">
-        <ActionButton 
-          icon="fa-solid fa-ice-cream" 
-          label="Snack" 
-          onClick={() => handleAction('feed')} 
-          color="bg-white text-rose-400 hover:bg-rose-50 border-b-4 border-rose-200"
-        />
-        <ActionButton 
-          icon="fa-solid fa-star" 
-          label="Play" 
-          onClick={() => handleAction('play')} 
-          color="bg-white text-orange-300 hover:bg-orange-50 border-b-4 border-orange-200"
-        />
-        <ActionButton 
-          icon="fa-solid fa-soap" 
-          label="Wash" 
-          onClick={() => handleAction('clean')} 
-          color="bg-white text-emerald-300 hover:bg-emerald-50 border-b-4 border-emerald-200"
-        />
-        <ActionButton 
-          icon={isSleeping ? "fa-solid fa-sun" : "fa-solid fa-moon"} 
-          label={isSleeping ? "Wake" : "Rest"} 
-          onClick={() => handleAction('sleep')} 
-          color="bg-white text-sky-300 hover:bg-sky-50 border-b-4 border-sky-200"
-        />
+        <ActionButton icon="fa-solid fa-ice-cream" label="Snack" onClick={() => handleAction('feed')} color="bg-white text-rose-400 border-b-4 border-rose-200" />
+        <ActionButton icon="fa-solid fa-star" label="Play" onClick={() => handleAction('play')} color="bg-white text-orange-300 border-b-4 border-orange-200" />
+        <ActionButton icon="fa-solid fa-soap" label="Wash" onClick={() => handleAction('clean')} color="bg-white text-emerald-300 border-b-4 border-emerald-200" />
+        <ActionButton icon={isSleeping ? "fa-solid fa-sun" : "fa-solid fa-moon"} label={isSleeping ? "Wake" : "Rest"} onClick={() => handleAction('sleep')} color="bg-white text-sky-300 border-b-4 border-sky-200" />
       </div>
 
       <div className="text-center mt-6 flex flex-col gap-1">
-        <div className="text-[10px] font-black text-rose-300 tracking-widest uppercase">
-          ♡ Gemigotchi Strawberry Edition ♡
-        </div>
-        <div className="flex justify-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-white shadow-inner border border-rose-100"></div>
-          <div className="w-4 h-4 rounded-full bg-white shadow-inner border border-rose-100"></div>
-        </div>
+        <div className="text-[10px] font-black text-rose-300 tracking-widest uppercase">♡ Gemigotchi Strawberry Edition ♡</div>
       </div>
     </div>
   );
 };
 
-interface ActionButtonProps {
-  icon: string;
-  label: string;
-  onClick: () => void;
-  color: string;
-}
-
-const ActionButton: React.FC<ActionButtonProps> = ({ icon, label, onClick, color }) => (
-  <button
-    onClick={onClick}
-    className={`flex-1 flex flex-col items-center justify-center py-4 rounded-3xl transition-all active:scale-95 shadow-md active:translate-y-1 ${color}`}
-  >
+const ActionButton: React.FC<{ icon: string; label: string; onClick: () => void; color: string }> = ({ icon, label, onClick, color }) => (
+  <button onClick={onClick} className={`flex-1 flex flex-col items-center justify-center py-4 rounded-3xl transition-all active:translate-y-1 ${color}`}>
     <i className={`${icon} text-2xl mb-1`}></i>
     <span className="text-[9px] font-black uppercase tracking-tighter">{label}</span>
   </button>
