@@ -7,7 +7,9 @@ export const getPetResponse = async (
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Safe access to process.env to prevent ReferenceError in browser
+  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
+  const ai = new GoogleGenAI({ apiKey: apiKey || '' });
   
   const chatHistory = history.map(h => ({
     role: h.role === 'user' ? 'user' : 'model',
@@ -18,7 +20,7 @@ export const getPetResponse = async (
     You are Gemigotchi, a cute pixelated puppy dog. 
     Current Stats: Hunger: ${stats.hunger}/100, Energy: ${stats.energy}/100, Happiness: ${stats.happiness}/100, Hygiene: ${stats.hygiene}/100.
     Personality: Loyal, cute, and use dog sounds like "Woof!", "Arf!", "*wags tail*". 
-    Keep it short.
+    Keep it short (under 2 sentences).
   `;
 
   try {

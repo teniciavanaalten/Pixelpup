@@ -1,10 +1,63 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PetStats, Message, PetState } from './types.ts';
-import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL } from './constants.tsx';
-import StatBar from './StatBar.tsx';
-import PetDisplay from './PetDisplay.tsx';
+import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL, PetIcons } from './constants.tsx';
 import { getPetResponse } from './geminiService.ts';
+
+// Internal Component: StatBar
+const StatBar: React.FC<{ label: string; value: number; color: string; icon: string }> = ({ label, value, color, icon }) => (
+  <div className="flex flex-col gap-1 w-full">
+    <div className="flex justify-between items-center text-[10px] font-black text-rose-900/40 uppercase">
+      <span className="flex items-center gap-1">
+        <i className={`${icon} text-rose-400`}></i> {label}
+      </span>
+      <span>{Math.round(value)}%</span>
+    </div>
+    <div className="w-full h-3 bg-white/50 rounded-full overflow-hidden border-2 border-rose-200">
+      <div
+        className={`h-full ${color} transition-all duration-500 ease-out`}
+        style={{ width: `${value}%` }}
+      ></div>
+    </div>
+  </div>
+);
+
+// Internal Component: PetDisplay
+const PetDisplay: React.FC<{ state: PetState; isSleeping: boolean }> = ({ state, isSleeping }) => {
+  const currentState = isSleeping ? PetState.SLEEPING : state;
+  const icon = (PetIcons as any)[currentState];
+
+  return (
+    <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[250px] overflow-hidden shadow-inner">
+      <div className="absolute inset-0 opacity-5 pointer-events-none" 
+           style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '4px 4px' }}></div>
+      <div className="absolute top-2 left-2 flex gap-1">
+        <div className="w-2 h-2 rounded-full bg-rose-100"></div>
+        <div className="w-2 h-2 rounded-full bg-rose-100"></div>
+      </div>
+      <div className="absolute top-2 right-2 text-[10px] font-mono text-rose-200 font-bold uppercase tracking-widest">
+        ♡ PUPPY-CAM ♡
+      </div>
+      <div className="animate-float z-10 scale-125">
+        <div className="relative">
+          {icon}
+          {isSleeping && (
+            <div className="absolute -top-8 -right-4 flex flex-col items-center">
+              <span className="text-rose-300 font-mono font-black animate-bounce delay-75">Z</span>
+              <span className="text-rose-300 font-mono font-black animate-bounce delay-150 text-sm">z</span>
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="mt-8 z-10">
+        <div className="px-6 py-1 bg-rose-200/50 text-rose-500 font-mono text-xs font-bold uppercase tracking-tighter rounded-full shadow-sm border border-rose-100 backdrop-blur-sm">
+          {currentState === PetState.SLEEPING ? 'Zzz...' : 'Good Puppy!'}
+        </div>
+      </div>
+      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/40 to-transparent pointer-events-none"></div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
   const [stats, setStats] = useState<PetStats>(INITIAL_STATS);
