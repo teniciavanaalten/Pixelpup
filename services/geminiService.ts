@@ -7,7 +7,8 @@ export const getPetResponse = async (
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY || '' });
+  // Fix: Always use process.env.API_KEY directly when initializing the GoogleGenAI client instance.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const chatHistory = history.map(h => ({
     role: h.role === 'user' ? 'user' : 'model',
@@ -32,20 +33,22 @@ export const getPetResponse = async (
   `;
 
   try {
+    // Fix: Use config.systemInstruction instead of manual injection into contents for better model performance and compliance.
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
-        { role: 'user', parts: [{ text: `System context: ${systemInstruction}` }] },
         ...chatHistory.map(m => ({ role: m.role, parts: m.parts })),
         { role: 'user', parts: [{ text: userMessage }] }
       ],
       config: {
+        systemInstruction: systemInstruction,
         temperature: 0.8,
         topP: 0.9,
       }
     });
 
-    return response.text || "Woof? (I'm a bit confused!)";
+    // Fix: Access the .text property directly instead of calling it as a function.
+    return response.text?.trim() || "Woof? (I'm a bit confused!)";
   } catch (error) {
     console.error("Gemini API Error:", error);
     return "Wroof... (My connection feels fuzzy...)";

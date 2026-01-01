@@ -1,11 +1,16 @@
 
 export interface PetStats {
+  id?: string;
+  user_id?: string;
   hunger: number;
   energy: number;
   happiness: number;
   hygiene: number;
+  health: number;
   level: number;
   xp: number;
+  is_dead: boolean;
+  last_updated: string;
 }
 
 export interface Message {
@@ -20,4 +25,5 @@ export enum PetState {
   ANGRY = 'angry',
   HUNGRY = 'hungry',
   DIRTY = 'dirty',
+  DEAD = 'dead'
 }
