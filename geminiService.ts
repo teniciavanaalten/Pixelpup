@@ -7,9 +7,15 @@ export const getPetResponse = async (
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  // Safe access to process.env to prevent ReferenceError in browser
-  const apiKey = typeof process !== 'undefined' ? process.env.API_KEY : '';
-  const ai = new GoogleGenAI({ apiKey: apiKey || '' });
+  // Use a fallback to ensure we don't crash if process.env is undefined
+  const key = (typeof process !== 'undefined' && process.env?.API_KEY) ? process.env.API_KEY : '';
+  
+  if (!key) {
+    console.error("API_KEY environment variable is missing.");
+    return "Woof? (I need my AI brain turned on in the settings!)";
+  }
+
+  const ai = new GoogleGenAI({ apiKey: key });
   
   const chatHistory = history.map(h => ({
     role: h.role === 'user' ? 'user' : 'model',
@@ -20,12 +26,13 @@ export const getPetResponse = async (
     You are Gemigotchi, a cute pixelated puppy dog. 
     Current Stats: Hunger: ${stats.hunger}/100, Energy: ${stats.energy}/100, Happiness: ${stats.happiness}/100, Hygiene: ${stats.hygiene}/100.
     Personality: Loyal, cute, and use dog sounds like "Woof!", "Arf!", "*wags tail*". 
-    Keep it short (under 2 sentences).
+    Refer to yourself as a "good boy" or "good pup".
+    Keep responses very short (1-2 sentences).
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: 'gemini-3-flash-preview',
       contents: [
         ...chatHistory.map(m => ({ role: m.role as "user" | "model", parts: m.parts })),
         { role: 'user', parts: [{ text: userMessage }] }
@@ -36,9 +43,9 @@ export const getPetResponse = async (
       }
     });
 
-    return response.text || "Woof?";
+    return response.text || "Woof!";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Wroof... (My connection feels fuzzy...)";
+    return "Wroof... (My connection feels a bit fuzzy right now...)";
   }
 };
