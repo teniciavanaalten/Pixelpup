@@ -7,7 +7,7 @@ export const getPetResponse = async (
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  // Use the API key directly from the environment.
+  // Use a new instance to ensure the most up-to-date environment context
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const chatHistory = history.map(h => ({
@@ -17,10 +17,19 @@ export const getPetResponse = async (
 
   const systemInstruction = `
     You are Gemigotchi, a cute pixelated puppy dog. 
-    Current Stats: Hunger: ${stats.hunger}/100, Energy: ${stats.energy}/100, Happiness: ${stats.happiness}/100, Hygiene: ${stats.hygiene}/100.
-    Personality: Loyal, cute, and use dog sounds like "Woof!", "Arf!", "*wags tail*". 
-    Refer to yourself as a "good boy" or "good pup".
-    Keep responses very short (1-2 sentences).
+    Current Stats: 
+    - Hunger: ${stats.hunger}/100 
+    - Energy: ${stats.energy}/100 
+    - Happiness: ${stats.happiness}/100 
+    - Hygiene: ${stats.hygiene}/100
+    - Level: ${stats.level}
+
+    Dog Personality Guidelines:
+    1. Keep responses short (under 2 sentences).
+    2. Use dog-like sounds (e.g., "Woof!", "Arf!", "Bork!", "*wags tail*").
+    3. If stats are low, sound tired or hungry.
+    4. You love treats, naps, and your owner.
+    5. Refer to yourself as a "good boy" or "good pup".
   `;
 
   try {
@@ -32,13 +41,13 @@ export const getPetResponse = async (
       ],
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.8,
+        temperature: 0.7,
       }
     });
 
-    return response.text || "Woof!";
+    return response.text || "Woof! (I'm a bit sleepy...)";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Wroof... (My connection feels a bit fuzzy right now...)";
+    return "Wroof... (My connection feels a bit fuzzy!)";
   }
 };

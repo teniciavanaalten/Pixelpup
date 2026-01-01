@@ -1,63 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { PetStats, Message, PetState } from './types.ts';
-import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL, PetIcons } from './constants.tsx';
+import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL } from './constants.tsx';
 import { getPetResponse } from './geminiService.ts';
-
-// Internal Component: StatBar
-const StatBar: React.FC<{ label: string; value: number; color: string; icon: string }> = ({ label, value, color, icon }) => (
-  <div className="flex flex-col gap-1 w-full">
-    <div className="flex justify-between items-center text-[10px] font-black text-rose-900/40 uppercase">
-      <span className="flex items-center gap-1">
-        <i className={`${icon} text-rose-400`}></i> {label}
-      </span>
-      <span>{Math.round(value)}%</span>
-    </div>
-    <div className="w-full h-3 bg-white/50 rounded-full overflow-hidden border-2 border-rose-200">
-      <div
-        className={`h-full ${color} transition-all duration-500 ease-out`}
-        style={{ width: `${value}%` }}
-      ></div>
-    </div>
-  </div>
-);
-
-// Internal Component: PetDisplay
-const PetDisplay: React.FC<{ state: PetState; isSleeping: boolean }> = ({ state, isSleeping }) => {
-  const currentState = isSleeping ? PetState.SLEEPING : state;
-  const icon = (PetIcons as any)[currentState];
-
-  return (
-    <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[250px] overflow-hidden shadow-inner">
-      <div className="absolute inset-0 opacity-5 pointer-events-none" 
-           style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '4px 4px' }}></div>
-      <div className="absolute top-2 left-2 flex gap-1">
-        <div className="w-2 h-2 rounded-full bg-rose-100"></div>
-        <div className="w-2 h-2 rounded-full bg-rose-100"></div>
-      </div>
-      <div className="absolute top-2 right-2 text-[10px] font-mono text-rose-200 font-bold uppercase tracking-widest">
-        ♡ PUPPY-CAM ♡
-      </div>
-      <div className="animate-float z-10 scale-125">
-        <div className="relative">
-          {icon}
-          {isSleeping && (
-            <div className="absolute -top-8 -right-4 flex flex-col items-center">
-              <span className="text-rose-300 font-mono font-black animate-bounce delay-75">Z</span>
-              <span className="text-rose-300 font-mono font-black animate-bounce delay-150 text-sm">z</span>
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="mt-8 z-10">
-        <div className="px-6 py-1 bg-rose-200/50 text-rose-500 font-mono text-xs font-bold uppercase tracking-tighter rounded-full shadow-sm border border-rose-100 backdrop-blur-sm">
-          {currentState === PetState.SLEEPING ? 'Zzz...' : 'Good Puppy!'}
-        </div>
-      </div>
-      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/40 to-transparent pointer-events-none"></div>
-    </div>
-  );
-};
+import PetDisplay from './PetDisplay.tsx';
+import StatBar from './StatBar.tsx';
 
 const App: React.FC = () => {
   const [stats, setStats] = useState<PetStats>(INITIAL_STATS);
@@ -68,6 +15,7 @@ const App: React.FC = () => {
   const [isThinking, setIsThinking] = useState(false);
   const [isSleeping, setIsSleeping] = useState(false);
   const [petState, setPetState] = useState<PetState>(PetState.HAPPY);
+  const [activeAction, setActiveAction] = useState<'feed' | 'play' | 'clean' | null>(null);
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -85,10 +33,10 @@ const App: React.FC = () => {
         }
         return {
           ...prev,
-          hunger: Math.max(0, prev.hunger - 2),
+          hunger: Math.max(0, prev.hunger - 1.5),
           energy: Math.max(0, prev.energy - 1),
-          happiness: Math.max(0, prev.happiness - 1.5),
-          hygiene: Math.max(0, prev.hygiene - 0.8),
+          happiness: Math.max(0, prev.happiness - 1.2),
+          hygiene: Math.max(0, prev.hygiene - 0.6),
         };
       });
     }, 10000);
@@ -116,7 +64,7 @@ const App: React.FC = () => {
       if (newXP >= XP_FOR_NEXT_LEVEL) {
         newXP -= XP_FOR_NEXT_LEVEL;
         newLevel += 1;
-        setMessages(m => [...m, { role: 'pet', text: `YAY! I'm level ${newLevel} now! ✨🐶` }]);
+        setMessages(m => [...m, { role: 'pet', text: `YAY! I'm level ${newLevel} now! I feel stronger! ✨🐶` }]);
       }
       return { ...prev, xp: newXP, level: newLevel };
     });
@@ -124,8 +72,13 @@ const App: React.FC = () => {
 
   const handleAction = (type: 'feed' | 'play' | 'clean' | 'sleep') => {
     if (isSleeping && type !== 'sleep') {
-      setMessages(m => [...m, { role: 'pet', text: "*dreaming of bones*... 💤" }]);
+      setMessages(m => [...m, { role: 'pet', text: "*dreaming of big juicy burgers*... 💤" }]);
       return;
+    }
+
+    if (type !== 'sleep') {
+      setActiveAction(type);
+      setTimeout(() => setActiveAction(null), 2500);
     }
 
     setStats(prev => {
@@ -149,10 +102,15 @@ const App: React.FC = () => {
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setIsThinking(true);
 
-    const response = await getPetResponse(userText, stats, messages);
-    setMessages(prev => [...prev, { role: 'pet', text: response }]);
-    setIsThinking(false);
-    addXP(5);
+    try {
+      const response = await getPetResponse(userText, stats, messages);
+      setMessages(prev => [...prev, { role: 'pet', text: response }]);
+    } catch (err) {
+      setMessages(prev => [...prev, { role: 'pet', text: "Woof... (My AI brain is confused, try again?)" }]);
+    } finally {
+      setIsThinking(false);
+      addXP(5);
+    }
   };
 
   return (
@@ -171,7 +129,7 @@ const App: React.FC = () => {
           </div>
         </div>
 
-        <PetDisplay state={petState} isSleeping={isSleeping} />
+        <PetDisplay state={petState} isSleeping={isSleeping} activeAction={activeAction} />
 
         <div className="grid grid-cols-2 gap-4 mt-8">
           <StatBar label="Tummy" value={stats.hunger} color="bg-orange-200" icon="fa-solid fa-cookie" />
@@ -206,7 +164,7 @@ const App: React.FC = () => {
             type="text"
             value={userInput}
             onChange={(e) => setUserInput(e.target.value)}
-            placeholder="Tell your puppy something cute..."
+            placeholder="Talk to your puppy..."
             className="flex-1 bg-rose-50/30 border-2 border-rose-100 rounded-2xl px-4 py-2 text-sm font-bold text-black focus:outline-none focus:border-rose-300 transition-all placeholder:text-rose-200"
           />
           <button type="submit" disabled={!userInput.trim() || isThinking} className="bg-rose-300 text-white px-4 rounded-2xl flex items-center justify-center disabled:opacity-50 hover:bg-rose-400 transition-colors shadow-lg border-b-4 border-rose-400">
@@ -216,8 +174,8 @@ const App: React.FC = () => {
       </div>
 
       <div className="bg-rose-100 rounded-b-3xl p-4 shadow-2xl border-t-8 border-rose-200 flex justify-between gap-3">
-        <ActionButton icon="fa-solid fa-ice-cream" label="Snack" onClick={() => handleAction('feed')} color="bg-white text-rose-400 border-b-4 border-rose-200" />
-        <ActionButton icon="fa-solid fa-star" label="Play" onClick={() => handleAction('play')} color="bg-white text-orange-300 border-b-4 border-orange-200" />
+        <ActionButton icon="fa-solid fa-hamburger" label="Snack" onClick={() => handleAction('feed')} color="bg-white text-rose-400 border-b-4 border-rose-200" />
+        <ActionButton icon="fa-solid fa-baseball-ball" label="Play" onClick={() => handleAction('play')} color="bg-white text-orange-300 border-b-4 border-orange-200" />
         <ActionButton icon="fa-solid fa-soap" label="Wash" onClick={() => handleAction('clean')} color="bg-white text-emerald-300 border-b-4 border-emerald-200" />
         <ActionButton icon={isSleeping ? "fa-solid fa-sun" : "fa-solid fa-moon"} label={isSleeping ? "Wake" : "Rest"} onClick={() => handleAction('sleep')} color="bg-white text-sky-300 border-b-4 border-sky-200" />
       </div>

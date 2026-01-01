@@ -6,17 +6,20 @@ import { PetIcons } from './constants.tsx';
 interface PetDisplayProps {
   state: PetState;
   isSleeping: boolean;
+  activeAction: 'feed' | 'play' | 'clean' | null;
 }
 
-const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping }) => {
+const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction }) => {
   const currentState = isSleeping ? PetState.SLEEPING : state;
   const icon = (PetIcons as any)[currentState];
 
   return (
     <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[250px] overflow-hidden shadow-inner">
+      {/* LCD Screen Grid Overlay */}
       <div className="absolute inset-0 opacity-5 pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '4px 4px' }}></div>
       
+      {/* Decorative LCD elements */}
       <div className="absolute top-2 left-2 flex gap-1">
         <div className="w-2 h-2 rounded-full bg-rose-100"></div>
         <div className="w-2 h-2 rounded-full bg-rose-100"></div>
@@ -25,7 +28,36 @@ const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping }) => {
         ♡ PUPPY-CAM ♡
       </div>
 
-      <div className="animate-float z-10 scale-125">
+      {/* Action Animations */}
+      {activeAction === 'feed' && (
+        <div className="absolute z-20 text-4xl animate-bounce" style={{ animationDuration: '0.5s' }}>
+          🍔
+        </div>
+      )}
+      {activeAction === 'play' && (
+        <div className="absolute z-20 text-4xl animate-bounce" style={{ 
+          left: '20%', 
+          animation: 'bounce 0.8s infinite alternate, moveX 2s linear infinite' 
+        }}>
+          ⚽
+        </div>
+      )}
+      {activeAction === 'clean' && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
+          <span className="text-4xl animate-pulse opacity-80">🧼🫧✨</span>
+        </div>
+      )}
+
+      <style>{`
+        @keyframes moveX {
+          0% { left: 10%; }
+          50% { left: 80%; }
+          100% { left: 10%; }
+        }
+      `}</style>
+
+      {/* The Pet */}
+      <div className={`animate-float z-10 scale-125 transition-transform duration-300 ${activeAction === 'feed' ? 'scale-150' : ''}`}>
         <div className="relative">
           {icon}
           {isSleeping && (
@@ -40,10 +72,11 @@ const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping }) => {
 
       <div className="mt-8 z-10">
         <div className="px-6 py-1 bg-rose-200/50 text-rose-500 font-mono text-xs font-bold uppercase tracking-tighter rounded-full shadow-sm border border-rose-100 backdrop-blur-sm">
-          {currentState === PetState.SLEEPING ? 'Zzz...' : 'Good Puppy!'}
+          {activeAction ? `${activeAction.toUpperCase()}ING...` : (currentState === PetState.SLEEPING ? 'Zzz...' : 'Good Puppy!')}
         </div>
       </div>
       
+      {/* Glass Reflection */}
       <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/40 to-transparent pointer-events-none"></div>
     </div>
   );
