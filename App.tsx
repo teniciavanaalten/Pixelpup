@@ -7,7 +7,7 @@ import PetDisplay from './PetDisplay.tsx';
 import StatBar from './StatBar.tsx';
 
 const STORAGE_KEY = 'pixelpup_stats';
-const TICK_INTERVAL = 5000; // Update every 5 seconds for smooth visual decline
+const TICK_INTERVAL = 3000; // Update every 3 seconds for more immediate feedback
 
 const App: React.FC = () => {
   const [stats, setStats] = useState<PetStats | null>(null);
@@ -17,49 +17,54 @@ const App: React.FC = () => {
   const [thought, setThought] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   
-  // Ref to track the latest stats for the timer loop to avoid stale closures
   const statsRef = useRef<PetStats | null>(null);
+  const isSleepingRef = useRef(false);
+
   useEffect(() => {
     statsRef.current = stats;
   }, [stats]);
 
-  // Helper to calculate decay since last update
-  const applyDecay = (pet: PetStats): PetStats => {
+  useEffect(() => {
+    isSleepingRef.current = isSleeping;
+  }, [isSleeping]);
+
+  // Unified decay and recovery logic
+  const calculateNextStats = (pet: PetStats, sleeping: boolean): PetStats => {
     const now = new Date();
     const last = new Date(pet.last_updated);
     const secondsPassed = Math.max(0, (now.getTime() - last.getTime()) / 1000);
     
-    if (secondsPassed < 1 || pet.is_dead) return pet;
+    if (secondsPassed < 0.1 || pet.is_dead) return pet;
 
-    // Decay Rates (Points per hour)
-    // Hunger: -12 pts/hr (Empty in ~8 hrs)
-    // Energy: -8 pts/hr (unless sleeping)
-    // Happiness: -10 pts/hr
-    // Hygiene: -6 pts/hr
-    const hungerDecay = 12;
-    const energyDecay = isSleeping ? -15 : 8; // Gain energy if sleeping
-    const happinessDecay = 10;
-    const hygieneDecay = 6;
+    // Hourly decay/recovery rates
+    const hungerDecay = 15;      // -15 pts/hr
+    const happinessDecay = 12;   // -12 pts/hr
+    const hygieneDecay = 8;      // -8 pts/hr
+    
+    // Energy: Gains 80 pts/hr while sleeping, loses 12 pts/hr while awake
+    const energyRate = sleeping ? -80 : 12; 
 
     let newHunger = Math.max(0, Math.min(100, pet.hunger - (hungerDecay * secondsPassed / 3600)));
-    let newEnergy = Math.max(0, Math.min(100, pet.energy - (energyDecay * secondsPassed / 3600)));
+    let newEnergy = Math.max(0, Math.min(100, pet.energy - (energyRate * secondsPassed / 3600)));
     let newHappiness = Math.max(0, Math.min(100, pet.happiness - (happinessDecay * secondsPassed / 3600)));
     let newHygiene = Math.max(0, Math.min(100, pet.hygiene - (hygieneDecay * secondsPassed / 3600)));
     let newHealth = pet.health;
 
-    // Health Logic: 
-    // If stats are critical (under 15%), health drops significantly.
-    // If stats are great (over 70%), health slowly recovers.
+    // If fully energized, automatically wake up (optional feature, but let's stick to manual for now)
+    // However, if energy reaches 100, it stays at 100.
+
+    // Health Penalty/Recovery
     const criticalThreshold = 15;
     let healthChangeRate = 0;
 
-    if (newHunger < criticalThreshold) healthChangeRate -= 15;
+    if (newHunger < criticalThreshold) healthChangeRate -= 20;
     if (newEnergy < criticalThreshold) healthChangeRate -= 10;
     if (newHappiness < criticalThreshold) healthChangeRate -= 10;
     if (newHygiene < criticalThreshold) healthChangeRate -= 5;
 
-    if (newHunger > 70 && newHappiness > 70 && newEnergy > 50) {
-      healthChangeRate += 2; // Natural slow healing
+    // Recovery if well cared for
+    if (newHunger > 60 && newHappiness > 60 && newEnergy > 40 && newHygiene > 40) {
+      healthChangeRate += 5; 
     }
 
     newHealth = Math.max(0, Math.min(100, pet.health + (healthChangeRate * secondsPassed / 3600)));
@@ -77,19 +82,16 @@ const App: React.FC = () => {
     };
   };
 
-  // Initial Load from LocalStorage
+  // Initial Load
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const processed = applyDecay(parsed);
+        const processed = calculateNextStats(parsed, false); // Assume not sleeping on reload
         setStats(processed);
         if (!processed.is_dead) {
-          const reason = processed.hunger < 30 ? 'hunger' : 
-                         processed.energy < 30 ? 'energy' : 
-                         processed.happiness < 30 ? 'happiness' : 'boredom';
-          triggerThought(processed, reason as any);
+          triggerThought(processed, 'boredom');
         }
       } catch (e) {
         setStats(INITIAL_STATS);
@@ -100,35 +102,33 @@ const App: React.FC = () => {
     setIsLoading(false);
   }, []);
 
-  // Real-time Tick for Stat Decline
+  // Real-time Update Loop
   useEffect(() => {
     const interval = setInterval(() => {
       if (statsRef.current && !statsRef.current.is_dead) {
-        const updated = applyDecay(statsRef.current);
-        // Only update state if stats actually changed significantly (to avoid render spam)
-        // or just update regularly since it's a small app
+        const updated = calculateNextStats(statsRef.current, isSleepingRef.current);
         setStats(updated);
       }
     }, TICK_INTERVAL);
 
     return () => clearInterval(interval);
-  }, [isSleeping]);
+  }, []); // Only once, relies on refs
 
-  // Persistence side-effect
+  // Persistence
   useEffect(() => {
     if (stats) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
     }
   }, [stats]);
 
-  const triggerThought = async (currentStats: PetStats, reason: 'hunger' | 'energy' | 'happiness' | 'hygiene' | 'boredom' | 'level_up') => {
+  const triggerThought = async (currentStats: PetStats, reason: any) => {
     if (currentStats.is_dead) return;
     try {
       const text = await getPetThought(currentStats, reason);
       setThought(text);
       setTimeout(() => setThought(null), 5000);
     } catch (e) {
-      // Fallback handled in geminiService
+      setThought("Woof! ♡");
     }
   };
 
@@ -138,6 +138,7 @@ const App: React.FC = () => {
     if (type === 'revive') {
       const resetPet = { ...INITIAL_STATS, last_updated: new Date().toISOString() };
       setStats(resetPet);
+      setIsSleeping(false);
       setThought("I'm back! Woof! ♡");
       return;
     }
@@ -150,25 +151,24 @@ const App: React.FC = () => {
       return;
     }
 
-    // Always apply decay immediately before an action to ensure accuracy
-    let current = applyDecay(stats);
+    // Capture state before action
+    let current = calculateNextStats(stats, isSleeping);
     if (current.is_dead) {
       setStats(current);
       return;
     }
 
-    // Visual feedback
+    // Feedback
     if (type !== 'sleep') {
       setActiveAction(type);
       setThought(null);
-      setTimeout(() => setActiveAction(null), 2000);
+      setTimeout(() => setActiveAction(null), 1500);
     }
 
-    // Apply action effects
     switch (type) {
       case 'feed':
         current.hunger = Math.min(100, current.hunger + 30);
-        current.hygiene = Math.max(0, current.hygiene - 8);
+        current.hygiene = Math.max(0, current.hygiene - 5);
         current.health = Math.min(100, current.health + 2);
         break;
       case 'play':
@@ -178,22 +178,21 @@ const App: React.FC = () => {
         break;
       case 'clean':
         current.hygiene = Math.min(100, current.hygiene + 50);
-        current.happiness = Math.max(0, current.happiness - 5); // Some dogs hate baths!
+        current.happiness = Math.max(0, current.happiness - 5);
         break;
       case 'sleep':
         setIsSleeping(!isSleeping);
         break;
     }
 
-    // Leveling logic
     if (type !== 'sleep') {
       current.xp += XP_PER_ACTION;
       if (current.xp >= XP_FOR_NEXT_LEVEL) {
         current.xp -= XP_FOR_NEXT_LEVEL;
         current.level += 1;
         triggerThought(current, 'level_up');
-      } else {
-        if (Math.random() > 0.8) triggerThought(current, type as any);
+      } else if (Math.random() > 0.85) {
+        triggerThought(current, type as any);
       }
     }
 
@@ -201,15 +200,15 @@ const App: React.FC = () => {
     setStats({ ...current });
   };
 
-  // UI State Mapping
+  // State Monitoring for Animations
   useEffect(() => {
     if (!stats) return;
     if (stats.is_dead) setPetState(PetState.DEAD);
     else if (isSleeping) setPetState(PetState.SLEEPING);
-    else if (stats.hunger < 25) setPetState(PetState.HUNGRY);
-    else if (stats.hygiene < 25) setPetState(PetState.DIRTY);
+    else if (stats.hunger < 20) setPetState(PetState.HUNGRY);
+    else if (stats.hygiene < 20) setPetState(PetState.DIRTY);
     else if (stats.happiness < 30) setPetState(PetState.SAD);
-    else if (stats.energy < 20) setPetState(PetState.SLEEPING); // Show tired if very low energy
+    else if (stats.energy < 15) setPetState(PetState.SLEEPING); 
     else setPetState(PetState.HAPPY);
   }, [stats, isSleeping]);
 
@@ -224,7 +223,6 @@ const App: React.FC = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col p-4 md:p-6 lg:py-10">
       <div className="bg-rose-100 rounded-3xl p-6 shadow-2xl border-8 border-rose-200 relative overflow-hidden">
-        {/* Background Decorative Rings */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-rose-200 rounded-full opacity-20"></div>
         <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-rose-200 rounded-full opacity-20"></div>
 
