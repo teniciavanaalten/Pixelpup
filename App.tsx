@@ -3,12 +3,12 @@ import React, { useState, useEffect } from 'react';
 import { PetStats, PetState } from './types.ts';
 import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL } from './constants.tsx';
 import { getPetThought } from './geminiService.ts';
-import { supabase } from './supabaseClient.ts';
 import PetDisplay from './PetDisplay.tsx';
 import StatBar from './StatBar.tsx';
 
+const STORAGE_KEY = 'pixelpup_stats';
+
 const App: React.FC = () => {
-  const [session, setSession] = useState<any>(null);
   const [stats, setStats] = useState<PetStats | null>(null);
   const [isSleeping, setIsSleeping] = useState(false);
   const [petState, setPetState] = useState<PetState>(PetState.HAPPY);
@@ -16,26 +16,7 @@ const App: React.FC = () => {
   const [thought, setThought] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Auth Listener
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Load Pet Data on Session
-  useEffect(() => {
-    if (session) {
-      loadPet();
-    }
-  }, [session]);
-
+  // Helper to calculate decay since last visit
   const applyElapsedTime = (pet: PetStats): PetStats => {
     const now = new Date();
     const last = new Date(pet.last_updated);
@@ -55,7 +36,7 @@ const App: React.FC = () => {
     let newHygiene = Math.max(0, pet.hygiene - (hygieneDecay * secondsPassed / 3600));
     let newHealth = pet.health;
 
-    // Health Penalty: If critical needs are neglected (under 10%), health drops fast
+    // Health Penalty: If critical needs are neglected (under 10%), health drops
     if (newHunger <= 10 || newHappiness <= 10 || newEnergy <= 10) {
        const healthPenalty = 20; // 20 points per hour of neglect
        newHealth = Math.max(0, pet.health - (healthPenalty * secondsPassed / 3600));
@@ -78,72 +59,38 @@ const App: React.FC = () => {
     };
   };
 
-  const loadPet = async () => {
-    setIsLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('pet')
-        .select('*')
-        .eq('user_id', session.user.id)
-        .maybeSingle();
-
-      if (!data) {
-        // No pet found, create one
-        const newPet = { ...INITIAL_STATS, user_id: session.user.id };
-        const { data: created, error: createError } = await supabase
-          .from('pet')
-          .insert([newPet])
-          .select()
-          .single();
-        
-        if (createError) throw createError;
-        setStats(created);
-        triggerThought(created, 'boredom');
-      } else {
-        const processed = applyElapsedTime(data);
+  // Initial Load from LocalStorage
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const processed = applyElapsedTime(parsed);
         setStats(processed);
-        await savePet(processed);
-        
-        if (processed.is_dead) {
-           setPetState(PetState.DEAD);
-        } else {
-           // Think about current state after loading
-           const reason = processed.hunger < 30 ? 'hunger' : 
-                          processed.energy < 30 ? 'energy' : 
-                          processed.happiness < 30 ? 'happiness' : 'boredom';
-           triggerThought(processed, reason);
+        // Think about current state after loading
+        if (!processed.is_dead) {
+          const reason = processed.hunger < 30 ? 'hunger' : 
+                         processed.energy < 30 ? 'energy' : 
+                         processed.happiness < 30 ? 'happiness' : 'boredom';
+          triggerThought(processed, reason as any);
         }
+      } catch (e) {
+        setStats(INITIAL_STATS);
       }
-    } catch (err) {
-      console.error("Failed to load pet:", err);
-    } finally {
-      setIsLoading(false);
+    } else {
+      setStats(INITIAL_STATS);
     }
-  };
+    setIsLoading(false);
+  }, []);
 
-  const savePet = async (updatedStats: PetStats) => {
-    try {
-      const { error } = await supabase
-        .from('pet')
-        .update({
-          hunger: updatedStats.hunger,
-          energy: updatedStats.energy,
-          happiness: updatedStats.happiness,
-          hygiene: updatedStats.hygiene,
-          health: updatedStats.health,
-          level: updatedStats.level,
-          xp: updatedStats.xp,
-          is_dead: updatedStats.is_dead,
-          last_updated: updatedStats.last_updated
-        })
-        .eq('user_id', session.user.id);
-      if (error) throw error;
-    } catch (err) {
-      console.error("Failed to save pet:", err);
+  // Persistence side-effect
+  useEffect(() => {
+    if (stats) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
     }
-  };
+  }, [stats]);
 
-  const triggerThought = async (currentStats: PetStats, reason: any) => {
+  const triggerThought = async (currentStats: PetStats, reason: 'hunger' | 'energy' | 'happiness' | 'hygiene' | 'boredom' | 'level_up') => {
     if (currentStats.is_dead) return;
     try {
       const text = await getPetThought(currentStats, reason);
@@ -158,9 +105,8 @@ const App: React.FC = () => {
     if (!stats) return;
 
     if (type === 'revive') {
-      const resetPet = { ...INITIAL_STATS, user_id: session.user.id, last_updated: new Date().toISOString() };
+      const resetPet = { ...INITIAL_STATS, last_updated: new Date().toISOString() };
       setStats(resetPet);
-      await savePet(resetPet);
       setThought("I'm back! Woof! ♡");
       return;
     }
@@ -173,11 +119,10 @@ const App: React.FC = () => {
       return;
     }
 
-    // Apply delta first
+    // Apply any background decay first
     let current = applyElapsedTime(stats);
     if (current.is_dead) {
       setStats(current);
-      await savePet(current);
       return;
     }
 
@@ -204,7 +149,6 @@ const App: React.FC = () => {
         break;
       case 'sleep':
         setIsSleeping(!isSleeping);
-        // Toggle immediate bonus if waking up/resting
         if (!isSleeping) {
            current.energy = Math.min(100, current.energy + 10);
         }
@@ -219,51 +163,24 @@ const App: React.FC = () => {
         current.level += 1;
         triggerThought(current, 'level_up');
       } else {
-        // Casual thought after action
-        if (Math.random() > 0.5) triggerThought(current, type as any);
+        if (Math.random() > 0.7) triggerThought(current, type as any);
       }
     }
 
     current.last_updated = new Date().toISOString();
-    setStats(current);
-    await savePet(current);
+    setStats({ ...current });
   };
 
   // UI State Mapping
   useEffect(() => {
     if (!stats) return;
-    if (stats.is_dead) {
-      setPetState(PetState.DEAD);
-    } else if (isSleeping) {
-      setPetState(PetState.SLEEPING);
-    } else if (stats.hunger < 25) {
-      setPetState(PetState.HUNGRY);
-    } else if (stats.hygiene < 25) {
-      setPetState(PetState.DIRTY);
-    } else if (stats.happiness < 30) {
-      setPetState(PetState.SAD);
-    } else {
-      setPetState(PetState.HAPPY);
-    }
+    if (stats.is_dead) setPetState(PetState.DEAD);
+    else if (isSleeping) setPetState(PetState.SLEEPING);
+    else if (stats.hunger < 25) setPetState(PetState.HUNGRY);
+    else if (stats.hygiene < 25) setPetState(PetState.DIRTY);
+    else if (stats.happiness < 30) setPetState(PetState.SAD);
+    else setPetState(PetState.HAPPY);
   }, [stats, isSleeping]);
-
-  if (!session) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-rose-50 p-6">
-        <div className="bg-white p-10 rounded-3xl shadow-2xl border-8 border-rose-200 text-center max-w-sm">
-          <h1 className="text-4xl font-black text-rose-400 mb-6 italic">PIXELPUP</h1>
-          <p className="text-rose-900/60 mb-8 font-bold">Your persistent AI puppy. Every second counts! Sign in to adopt.</p>
-          <button 
-            onClick={() => supabase.auth.signInWithOAuth({ provider: 'google' })}
-            className="w-full bg-rose-400 text-white font-black py-4 rounded-2xl border-b-8 border-rose-500 active:translate-y-1 active:border-b-0 transition-all mb-4"
-          >
-            SIGN IN WITH GOOGLE
-          </button>
-          <div className="text-[10px] text-rose-300 font-bold uppercase tracking-widest">Growth & Death are persistent</div>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading || !stats) {
     return (
@@ -280,8 +197,7 @@ const App: React.FC = () => {
           <div className="flex flex-col">
             <h1 className="text-3xl font-black text-rose-400 tracking-tighter italic">PIXELPUP</h1>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-[10px] font-bold text-rose-500 bg-white px-2 py-0.5 rounded-full border border-rose-100 uppercase">LVL {stats.level}</span>
-              <button onClick={() => supabase.auth.signOut()} className="text-[9px] text-rose-300 hover:text-rose-500 font-bold uppercase">Logout</button>
+              <span className="text-[10px] font-bold text-rose-500 bg-white px-2 py-0.5 rounded-full border border-rose-100 uppercase tracking-widest">LVL {stats.level}</span>
             </div>
           </div>
           <div className="text-right flex flex-col items-end">
@@ -331,7 +247,7 @@ const App: React.FC = () => {
       )}
 
       <div className="text-center mt-auto py-8">
-        <div className="text-[10px] font-black text-rose-300 tracking-widest uppercase opacity-60">♡ Purely AI Strawberry Edition ♡</div>
+        <div className="text-[10px] font-black text-rose-300 tracking-widest uppercase opacity-60">♡ Purely Local Browser Edition ♡</div>
       </div>
     </div>
   );
