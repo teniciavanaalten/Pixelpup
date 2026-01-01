@@ -1,20 +1,13 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { PetStats, Message } from "./types.ts";
+import { PetStats } from "./types.ts";
 
-export const getPetResponse = async (
-  userMessage: string,
+export const getPetThought = async (
   stats: PetStats,
-  history: Message[]
+  reason: 'hunger' | 'energy' | 'happiness' | 'hygiene' | 'boredom' | 'level_up'
 ): Promise<string> => {
-  // Use a new instance to ensure the most up-to-date environment context
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
-  const chatHistory = history.map(h => ({
-    role: h.role === 'user' ? 'user' : 'model',
-    parts: [{ text: h.text }]
-  }));
-
   const systemInstruction = `
     You are Gemigotchi, a cute pixelated puppy dog. 
     Current Stats: 
@@ -24,30 +17,37 @@ export const getPetResponse = async (
     - Hygiene: ${stats.hygiene}/100
     - Level: ${stats.level}
 
-    Dog Personality Guidelines:
-    1. Keep responses short (under 2 sentences).
+    Context for this thought: ${reason}
+
+    Guidelines:
+    1. Keep responses extremely short (under 10 words).
     2. Use dog-like sounds (e.g., "Woof!", "Arf!", "Bork!", "*wags tail*").
-    3. If stats are low, sound tired or hungry.
-    4. You love treats, naps, and your owner.
-    5. Refer to yourself as a "good boy" or "good pup".
+    3. Be cute and expressive. 
+    4. If the reason is a low stat, mention it in a dog-like way (e.g., "Tummy is rumbly! Arf!").
   `;
 
   try {
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: [
-        ...chatHistory.map(m => ({ role: m.role as "user" | "model", parts: m.parts })),
-        { role: 'user', parts: [{ text: userMessage }] }
-      ],
+      contents: [{ role: 'user', parts: [{ text: "What are you thinking right now?" }] }],
       config: {
         systemInstruction: systemInstruction,
-        temperature: 0.7,
+        temperature: 0.9,
       }
     });
 
-    return response.text || "Woof! (I'm a bit sleepy...)";
+    return response.text?.trim() || "Woof!";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Wroof... (My connection feels a bit fuzzy!)";
+    // Fallbacks if API fails or isn't configured
+    const fallbacks: Record<string, string> = {
+      hunger: "Rumbly tummy... Woof? 🍔",
+      energy: "So... sleepy... Zzz 💤",
+      happiness: "Play with me? Arf! ⚽",
+      hygiene: "I'm a bit itchy... *scratch* 🧼",
+      boredom: "Squirrel?! Where? 🐿️",
+      level_up: "I'm a big pup now! ✨"
+    };
+    return fallbacks[reason] || "Woof!";
   }
 };

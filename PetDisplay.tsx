@@ -7,14 +7,15 @@ interface PetDisplayProps {
   state: PetState;
   isSleeping: boolean;
   activeAction: 'feed' | 'play' | 'clean' | null;
+  thought: string | null;
 }
 
-const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction }) => {
+const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction, thought }) => {
   const currentState = isSleeping ? PetState.SLEEPING : state;
   const icon = (PetIcons as any)[currentState];
 
   return (
-    <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[250px] overflow-hidden shadow-inner">
+    <div className="relative flex flex-col items-center justify-center p-8 bg-[#fffcfb] rounded-2xl border-8 border-rose-200 min-h-[320px] overflow-hidden shadow-inner">
       {/* LCD Screen Grid Overlay */}
       <div className="absolute inset-0 opacity-5 pointer-events-none" 
            style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '4px 4px' }}></div>
@@ -25,8 +26,19 @@ const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction
         <div className="w-2 h-2 rounded-full bg-rose-100"></div>
       </div>
       <div className="absolute top-2 right-2 text-[10px] font-mono text-rose-200 font-bold uppercase tracking-widest">
-        ♡ PUPPY-CAM ♡
+        ♡ LIVE PUP-CAM ♡
       </div>
+
+      {/* Thought Bubble */}
+      {thought && !activeAction && (
+        <div className="absolute top-12 z-30 animate-bounce">
+          <div className="relative bg-white border-4 border-rose-200 px-4 py-2 rounded-2xl shadow-lg max-w-[180px] text-center">
+            <p className="text-sm font-black text-rose-500 leading-tight">{thought}</p>
+            {/* Bubble tail */}
+            <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-r-4 border-b-4 border-rose-200 rotate-45"></div>
+          </div>
+        </div>
+      )}
 
       {/* Action Animations */}
       {activeAction === 'feed' && (
@@ -57,7 +69,7 @@ const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction
       `}</style>
 
       {/* The Pet */}
-      <div className={`animate-float z-10 scale-125 transition-transform duration-300 ${activeAction === 'feed' ? 'scale-150' : ''}`}>
+      <div className={`animate-float z-10 scale-[1.35] transition-transform duration-300 ${activeAction === 'feed' ? 'scale-[1.6]' : ''}`}>
         <div className="relative">
           {icon}
           {isSleeping && (
@@ -70,7 +82,7 @@ const PetDisplay: React.FC<PetDisplayProps> = ({ state, isSleeping, activeAction
         </div>
       </div>
 
-      <div className="mt-8 z-10">
+      <div className="mt-12 z-10">
         <div className="px-6 py-1 bg-rose-200/50 text-rose-500 font-mono text-xs font-bold uppercase tracking-tighter rounded-full shadow-sm border border-rose-100 backdrop-blur-sm">
           {activeAction ? `${activeAction.toUpperCase()}ING...` : (currentState === PetState.SLEEPING ? 'Zzz...' : 'Good Puppy!')}
         </div>
