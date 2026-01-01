@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { PetStats, PetState } from './types.ts';
 import { INITIAL_STATS, XP_PER_ACTION, XP_FOR_NEXT_LEVEL } from './constants.tsx';
 import { getPetThought } from './geminiService.ts';
@@ -7,6 +7,7 @@ import PetDisplay from './PetDisplay.tsx';
 import StatBar from './StatBar.tsx';
 
 const STORAGE_KEY = 'pixelpup_stats';
+const TICK_INTERVAL = 5000; // Update every 5 seconds for smooth visual decline
 
 const App: React.FC = () => {
   const [stats, setStats] = useState<PetStats | null>(null);
@@ -15,36 +16,53 @@ const App: React.FC = () => {
   const [activeAction, setActiveAction] = useState<'feed' | 'play' | 'clean' | null>(null);
   const [thought, setThought] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  
+  // Ref to track the latest stats for the timer loop to avoid stale closures
+  const statsRef = useRef<PetStats | null>(null);
+  useEffect(() => {
+    statsRef.current = stats;
+  }, [stats]);
 
-  // Helper to calculate decay since last visit
-  const applyElapsedTime = (pet: PetStats): PetStats => {
+  // Helper to calculate decay since last update
+  const applyDecay = (pet: PetStats): PetStats => {
     const now = new Date();
     const last = new Date(pet.last_updated);
     const secondsPassed = Math.max(0, (now.getTime() - last.getTime()) / 1000);
     
-    if (secondsPassed === 0) return pet;
+    if (secondsPassed < 1 || pet.is_dead) return pet;
 
     // Decay Rates (Points per hour)
-    const hungerDecay = 8;
-    const energyDecay = 5;
-    const happinessDecay = 7;
-    const hygieneDecay = 4;
+    // Hunger: -12 pts/hr (Empty in ~8 hrs)
+    // Energy: -8 pts/hr (unless sleeping)
+    // Happiness: -10 pts/hr
+    // Hygiene: -6 pts/hr
+    const hungerDecay = 12;
+    const energyDecay = isSleeping ? -15 : 8; // Gain energy if sleeping
+    const happinessDecay = 10;
+    const hygieneDecay = 6;
 
-    let newHunger = Math.max(0, pet.hunger - (hungerDecay * secondsPassed / 3600));
-    let newEnergy = Math.max(0, pet.energy - (energyDecay * secondsPassed / 3600));
-    let newHappiness = Math.max(0, pet.happiness - (happinessDecay * secondsPassed / 3600));
-    let newHygiene = Math.max(0, pet.hygiene - (hygieneDecay * secondsPassed / 3600));
+    let newHunger = Math.max(0, Math.min(100, pet.hunger - (hungerDecay * secondsPassed / 3600)));
+    let newEnergy = Math.max(0, Math.min(100, pet.energy - (energyDecay * secondsPassed / 3600)));
+    let newHappiness = Math.max(0, Math.min(100, pet.happiness - (happinessDecay * secondsPassed / 3600)));
+    let newHygiene = Math.max(0, Math.min(100, pet.hygiene - (hygieneDecay * secondsPassed / 3600)));
     let newHealth = pet.health;
 
-    // Health Penalty: If critical needs are neglected (under 10%), health drops
-    if (newHunger <= 10 || newHappiness <= 10 || newEnergy <= 10) {
-       const healthPenalty = 20; // 20 points per hour of neglect
-       newHealth = Math.max(0, pet.health - (healthPenalty * secondsPassed / 3600));
-    } else if (newHunger > 50 && newHappiness > 50 && newEnergy > 30) {
-       // Slow natural healing if well taken care of
-       newHealth = Math.min(100, pet.health + (2 * secondsPassed / 3600));
+    // Health Logic: 
+    // If stats are critical (under 15%), health drops significantly.
+    // If stats are great (over 70%), health slowly recovers.
+    const criticalThreshold = 15;
+    let healthChangeRate = 0;
+
+    if (newHunger < criticalThreshold) healthChangeRate -= 15;
+    if (newEnergy < criticalThreshold) healthChangeRate -= 10;
+    if (newHappiness < criticalThreshold) healthChangeRate -= 10;
+    if (newHygiene < criticalThreshold) healthChangeRate -= 5;
+
+    if (newHunger > 70 && newHappiness > 70 && newEnergy > 50) {
+      healthChangeRate += 2; // Natural slow healing
     }
 
+    newHealth = Math.max(0, Math.min(100, pet.health + (healthChangeRate * secondsPassed / 3600)));
     const is_dead = newHealth <= 0 || pet.is_dead;
 
     return {
@@ -65,9 +83,8 @@ const App: React.FC = () => {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        const processed = applyElapsedTime(parsed);
+        const processed = applyDecay(parsed);
         setStats(processed);
-        // Think about current state after loading
         if (!processed.is_dead) {
           const reason = processed.hunger < 30 ? 'hunger' : 
                          processed.energy < 30 ? 'energy' : 
@@ -83,6 +100,20 @@ const App: React.FC = () => {
     setIsLoading(false);
   }, []);
 
+  // Real-time Tick for Stat Decline
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (statsRef.current && !statsRef.current.is_dead) {
+        const updated = applyDecay(statsRef.current);
+        // Only update state if stats actually changed significantly (to avoid render spam)
+        // or just update regularly since it's a small app
+        setStats(updated);
+      }
+    }, TICK_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [isSleeping]);
+
   // Persistence side-effect
   useEffect(() => {
     if (stats) {
@@ -97,7 +128,7 @@ const App: React.FC = () => {
       setThought(text);
       setTimeout(() => setThought(null), 5000);
     } catch (e) {
-      setThought("Woof! ♡");
+      // Fallback handled in geminiService
     }
   };
 
@@ -119,8 +150,8 @@ const App: React.FC = () => {
       return;
     }
 
-    // Apply any background decay first
-    let current = applyElapsedTime(stats);
+    // Always apply decay immediately before an action to ensure accuracy
+    let current = applyDecay(stats);
     if (current.is_dead) {
       setStats(current);
       return;
@@ -136,22 +167,21 @@ const App: React.FC = () => {
     // Apply action effects
     switch (type) {
       case 'feed':
-        current.hunger = Math.min(100, current.hunger + 35);
-        current.hygiene = Math.max(0, current.hygiene - 5);
-        current.health = Math.min(100, current.health + 5);
+        current.hunger = Math.min(100, current.hunger + 30);
+        current.hygiene = Math.max(0, current.hygiene - 8);
+        current.health = Math.min(100, current.health + 2);
         break;
       case 'play':
-        current.happiness = Math.min(100, current.happiness + 30);
-        current.energy = Math.max(0, current.energy - 20);
+        current.happiness = Math.min(100, current.happiness + 25);
+        current.energy = Math.max(0, current.energy - 15);
+        current.hunger = Math.max(0, current.hunger - 5);
         break;
       case 'clean':
-        current.hygiene = Math.min(100, current.hygiene + 60);
+        current.hygiene = Math.min(100, current.hygiene + 50);
+        current.happiness = Math.max(0, current.happiness - 5); // Some dogs hate baths!
         break;
       case 'sleep':
         setIsSleeping(!isSleeping);
-        if (!isSleeping) {
-           current.energy = Math.min(100, current.energy + 10);
-        }
         break;
     }
 
@@ -163,7 +193,7 @@ const App: React.FC = () => {
         current.level += 1;
         triggerThought(current, 'level_up');
       } else {
-        if (Math.random() > 0.7) triggerThought(current, type as any);
+        if (Math.random() > 0.8) triggerThought(current, type as any);
       }
     }
 
@@ -179,6 +209,7 @@ const App: React.FC = () => {
     else if (stats.hunger < 25) setPetState(PetState.HUNGRY);
     else if (stats.hygiene < 25) setPetState(PetState.DIRTY);
     else if (stats.happiness < 30) setPetState(PetState.SAD);
+    else if (stats.energy < 20) setPetState(PetState.SLEEPING); // Show tired if very low energy
     else setPetState(PetState.HAPPY);
   }, [stats, isSleeping]);
 
@@ -193,6 +224,10 @@ const App: React.FC = () => {
   return (
     <div className="max-w-md mx-auto min-h-screen flex flex-col p-4 md:p-6 lg:py-10">
       <div className="bg-rose-100 rounded-3xl p-6 shadow-2xl border-8 border-rose-200 relative overflow-hidden">
+        {/* Background Decorative Rings */}
+        <div className="absolute -top-10 -right-10 w-40 h-40 bg-rose-200 rounded-full opacity-20"></div>
+        <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-rose-200 rounded-full opacity-20"></div>
+
         <div className="flex justify-between items-end mb-6 relative z-10">
           <div className="flex flex-col">
             <h1 className="text-3xl font-black text-rose-400 tracking-tighter italic">PIXELPUP</h1>
