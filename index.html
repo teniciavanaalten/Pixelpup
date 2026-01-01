@@ -32,14 +32,6 @@
   }
 }
 </script>
-<script>
-  // Polyfill for process.env used by some libraries and SDKs
-  window.process = {
-    env: {
-      API_KEY: "" // Will be injected by Vercel if configured as NEXT_PUBLIC_ or handled by the platform
-    }
-  };
-</script>
 </head>
 <body class="bg-rose-50 min-h-screen">
   <div id="root"></div>

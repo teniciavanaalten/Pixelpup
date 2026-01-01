@@ -7,15 +7,8 @@ export const getPetResponse = async (
   stats: PetStats,
   history: Message[]
 ): Promise<string> => {
-  // Use a fallback to ensure we don't crash if process.env is undefined
-  const key = (typeof process !== 'undefined' && process.env?.API_KEY) ? process.env.API_KEY : '';
-  
-  if (!key) {
-    console.error("API_KEY environment variable is missing.");
-    return "Woof? (I need my AI brain turned on in the settings!)";
-  }
-
-  const ai = new GoogleGenAI({ apiKey: key });
+  // Use the API key directly from the environment.
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   
   const chatHistory = history.map(h => ({
     role: h.role === 'user' ? 'user' : 'model',
